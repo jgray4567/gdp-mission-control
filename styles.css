@@ -5,6 +5,7 @@
 .brand{display:flex;gap:10px;align-items:center;margin-bottom:16px}.brand img{width:40px;height:40px;object-fit:contain}.brand h1{font-size:14px;margin:0}.brand p{margin:2px 0 0;color:var(--muted);font-size:12px}
 nav a{display:block;padding:9px 10px;border-radius:8px;color:#2a3340;text-decoration:none;font-size:14px;margin-bottom:4px}nav a.active,nav a:hover{background:#eef2f6;color:#13283f;font-weight:600}
 .main{padding:20px 24px}.topbar{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:16px}.topbar h2{margin:0 0 4px;font-size:22px}.topbar p{margin:0;color:var(--muted)}
+.data-source{font-size:12px;padding:2px 8px;border:1px solid var(--line);border-radius:999px;background:#fff;margin-left:6px}
 .actions{display:flex;gap:8px;flex-wrap:wrap}.actions button{border:1px solid var(--line);background:#fff;padding:9px 12px;border-radius:8px;font-weight:600;cursor:pointer}.actions .primary{background:var(--accent);color:#fff;border-color:var(--accent)}
 .kpis{display:grid;grid-template-columns:repeat(5,minmax(120px,1fr));gap:10px;margin-bottom:12px}
 .kpi{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px}.kpi label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}.kpi strong{font-size:20px}
