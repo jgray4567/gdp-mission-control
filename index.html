@@ -39,9 +39,9 @@
           <p>Track jobs, billing, and studio performance in one place. <span id="dataSource" class="data-source">Loading data…</span></p>
         </div>
         <div class="actions">
-          <button>+ New Job</button>
-          <button>+ Log Time</button>
-          <button class="primary">Bill It</button>
+          <button id="btnNewJob">+ New Job</button>
+          <button id="btnLogTime">+ Log Time</button>
+          <button id="btnBillIt" class="primary">Bill It</button>
         </div>
       </header>
 
@@ -88,6 +88,17 @@
       </section>
     </main>
   </div>
+  <div id="modal" class="modal hidden" aria-hidden="true">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3 id="modalTitle">Action</h3>
+        <button id="modalClose" class="ghost">Close</button>
+      </div>
+      <form id="modalForm" class="modal-form"></form>
+      <div id="modalNote" class="modal-note"></div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>

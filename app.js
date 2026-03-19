@@ -1,9 +1,6 @@
 const SHEET_ID = '1Ym3DmIw7gwF0I6hMk9b1GRxRZzVNVVoHhQvQd4hMhkY';
-const GIDS = {
-  jobs: 423951101,
-  time: 1419771717,
-  invoices: 310085797,
-};
+const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit`;
+const GIDS = { jobs: 423951101, time: 1419771717, invoices: 310085797 };
 
 const fallback = {
   alerts:[
@@ -31,19 +28,16 @@ const fallback = {
   capacity:{jon:'82%',joy:'74%',turnaround:'4.2 days'}
 };
 
+let currentModel = structuredClone(fallback);
+
 function parseCSV(text){
   const rows=[]; let row=[]; let cell=''; let inQ=false;
   for(let i=0;i<text.length;i++){
     const ch=text[i], nx=text[i+1];
-    if(ch==='"'){
-      if(inQ && nx==='"'){ cell+='"'; i++; } else inQ=!inQ;
-    } else if(ch===',' && !inQ){ row.push(cell.trim()); cell=''; }
-    else if((ch==='\n' || ch==='\r') && !inQ){
-      if(ch==='\r' && nx==='\n') i++;
-      row.push(cell.trim());
-      if(row.some(v=>v!=='')) rows.push(row);
-      row=[]; cell='';
-    } else cell+=ch;
+    if(ch==='"'){ if(inQ && nx==='"'){ cell+='"'; i++; } else inQ=!inQ; }
+    else if(ch===',' && !inQ){ row.push(cell.trim()); cell=''; }
+    else if((ch==='\n' || ch==='\r') && !inQ){ if(ch==='\r' && nx==='\n') i++; row.push(cell.trim()); if(row.some(v=>v!=='')) rows.push(row); row=[]; cell=''; }
+    else cell+=ch;
   }
   if(cell.length || row.length){ row.push(cell.trim()); if(row.some(v=>v!=='')) rows.push(row); }
   return rows;
@@ -52,13 +46,12 @@ function parseCSV(text){
 function rowsToObjects(matrix){
   if(!matrix.length) return [];
   const h=matrix[0].map(x=>x.toLowerCase());
-  return matrix.slice(1).filter(r=>r.some(Boolean)).map(r=>{
-    const o={}; h.forEach((k,i)=>o[k]=r[i]||''); return o;
-  });
+  return matrix.slice(1).filter(r=>r.some(Boolean)).map(r=>{ const o={}; h.forEach((k,i)=>o[k]=r[i]||''); return o; });
 }
 
 const money = s => Number(String(s||'').replace(/[^\d.-]/g,'')) || 0;
 const hours = s => Number(String(s||'').replace(/[^\d.-]/g,'')) || 0;
+const fmtMoney = n => `$${Number(n||0).toLocaleString()}`;
 
 async function fetchTab(gid){
   const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}`;
@@ -97,9 +90,7 @@ function render(model){
 
 function fromSheet(jobs, time, invoices){
   const now = new Date();
-  const thisMonth = now.getMonth();
-  const thisYear = now.getFullYear();
-
+  const thisMonth = now.getMonth(), thisYear = now.getFullYear();
   const activeStatuses = new Set(['active','in progress','production','review','client feedback','implementation']);
   const waitingStatuses = new Set(['waiting on client','waiting']);
 
@@ -130,11 +121,7 @@ function fromSheet(jobs, time, invoices){
   });
 
   const jobsRows = jobs.slice(0,8).map(j=>[
-    j['project']||j['job']||'—',
-    j['client']||'—',
-    j['owner']||'—',
-    j['status']||'—',
-    j['due date']||'—',
+    j['project']||j['job']||'—', j['client']||'—', j['owner']||'—', j['status']||'—', j['due date']||'—',
     (j['status']||'').toLowerCase().includes('risk') ? 'At Risk' : ((j['status']||'').toLowerCase().includes('bill') ? 'Ready to Bill' : 'On Track'),
     j['billable amount'] || '$—'
   ]);
@@ -148,44 +135,117 @@ function fromSheet(jobs, time, invoices){
     billQueue: invoices.filter(i=>['draft','ready'].includes((i['status']||'').toLowerCase())).slice(0,5).map(i=>`${i['client']||'Client'} — ${i['invoice id']||'Draft'} (${i['amount']||'$0'})`),
     jobs: jobsRows.length?jobsRows:fallback.jobs,
     kpis:[
-      ['Active Jobs',activeJobs],
-      ['Waiting on Client',waiting],
-      ['Hours This Month',monthHours.toFixed(1)],
-      ['Invoices Draft',draft],
-      ['Invoices Sent',sent],
-      ['Invoices Overdue',overdue],
-      ['Revenue Ready',`$${ready.toLocaleString()}`],
-      ['Billed (MTD)',`$${billedMTD.toLocaleString()}`],
-      ['Jon Hours MTD',jonHours.toFixed(1)],
-      ['Joy Hours MTD',joyHours.toFixed(1)]
+      ['Active Jobs',activeJobs], ['Waiting on Client',waiting], ['Hours This Month',monthHours.toFixed(1)], ['Invoices Draft',draft], ['Invoices Sent',sent],
+      ['Invoices Overdue',overdue], ['Revenue Ready',fmtMoney(ready)], ['Billed (MTD)',fmtMoney(billedMTD)], ['Jon Hours MTD',jonHours.toFixed(1)], ['Joy Hours MTD',joyHours.toFixed(1)]
     ],
-    revenue:{
-      ready:`$${ready.toLocaleString()}`,
-      billed:`$${billedMTD.toLocaleString()}`,
-      outstanding:`$${outstanding.toLocaleString()}`
-    },
-    capacity:{
-      jon:`${Math.min(100,Math.round((jonHours/120)*100))}%`,
-      joy:`${Math.min(100,Math.round((joyHours/120)*100))}%`,
-      turnaround:'Live calc (phase 2)'
-    }
+    revenue:{ ready:fmtMoney(ready), billed:fmtMoney(billedMTD), outstanding:fmtMoney(outstanding) },
+    capacity:{ jon:`${Math.min(100,Math.round((jonHours/120)*100))}%`, joy:`${Math.min(100,Math.round((joyHours/120)*100))}%`, turnaround:'Live calc (phase 2)' }
+  };
+}
+
+function getQueue(){ try{return JSON.parse(localStorage.getItem('gdpQueue')||'[]');}catch{return [];} }
+function setQueue(q){ localStorage.setItem('gdpQueue', JSON.stringify(q)); }
+
+function queueAction(type,payload){
+  const q=getQueue();
+  q.unshift({ id:`Q-${Date.now()}`, type, payload, createdAt:new Date().toISOString(), status:'pending' });
+  setQueue(q);
+}
+
+function wireUI(){
+  const modal=document.getElementById('modal');
+  const form=document.getElementById('modalForm');
+  const title=document.getElementById('modalTitle');
+  const note=document.getElementById('modalNote');
+  const close=()=>{ modal.classList.add('hidden'); form.innerHTML=''; note.textContent=''; };
+  document.getElementById('modalClose').onclick=close;
+  modal.addEventListener('click',e=>{ if(e.target===modal) close(); });
+
+  document.getElementById('btnNewJob').onclick=()=>{
+    modal.classList.remove('hidden');
+    title.textContent='Create New Job';
+    form.innerHTML=`
+      <label>Client<input name="client" required></label>
+      <label>Project<input name="project" required></label>
+      <label>Owner<select name="owner"><option>Jon</option><option>Joy</option></select></label>
+      <label>Due Date<input name="due" type="date"></label>
+      <label class="full">Notes<textarea name="notes"></textarea></label>
+      <button class="submit" type="submit">Save Job</button>
+    `;
+    form.onsubmit=(e)=>{
+      e.preventDefault();
+      const d=Object.fromEntries(new FormData(form).entries());
+      queueAction('new_job',d);
+      currentModel.jobs.unshift([d.project,d.client,d.owner,'Lead',d.due||'—','On Track','$—']);
+      currentModel.kpis[0][1]=Number(currentModel.kpis[0][1]||0)+1;
+      render(currentModel);
+      note.innerHTML=`Saved to local queue. Next: sync to sheet → <a href="${SHEET_URL}" target="_blank" rel="noopener">Open Sheet</a>`;
+    };
+  };
+
+  document.getElementById('btnLogTime').onclick=()=>{
+    modal.classList.remove('hidden');
+    title.textContent='Log Time';
+    form.innerHTML=`
+      <label>Date<input name="date" type="date" required value="${new Date().toISOString().slice(0,10)}"></label>
+      <label>Client<input name="client" required></label>
+      <label>Project<input name="project" required></label>
+      <label>Person<select name="person"><option>Jon</option><option>Joy</option></select></label>
+      <label>Hours<input name="hours" type="number" step="0.25" min="0" required></label>
+      <label>Billable<select name="billable"><option>Yes</option><option>No</option></select></label>
+      <label class="full">Description<textarea name="description"></textarea></label>
+      <button class="submit" type="submit">Log Time</button>
+    `;
+    form.onsubmit=(e)=>{
+      e.preventDefault();
+      const d=Object.fromEntries(new FormData(form).entries());
+      queueAction('log_time',d);
+      const h=Number(d.hours||0);
+      currentModel.kpis[2][1]=(Number(currentModel.kpis[2][1]||0)+h).toFixed(1);
+      if(d.person==='Jon') currentModel.kpis[8][1]=(Number(currentModel.kpis[8][1]||0)+h).toFixed(1);
+      if(d.person==='Joy') currentModel.kpis[9][1]=(Number(currentModel.kpis[9][1]||0)+h).toFixed(1);
+      render(currentModel);
+      note.innerHTML=`Logged locally. Next: sync to sheet → <a href="${SHEET_URL}" target="_blank" rel="noopener">Open Sheet</a>`;
+    };
+  };
+
+  document.getElementById('btnBillIt').onclick=()=>{
+    modal.classList.remove('hidden');
+    title.textContent='Bill It — Invoice Draft';
+    form.innerHTML=`
+      <label>Client<input name="client" required></label>
+      <label>Project<input name="project" required></label>
+      <label>Hours<input name="hours" type="number" step="0.25" min="0" required></label>
+      <label>Rate<input name="rate" type="number" step="1" min="0" required></label>
+      <label>Issue Date<input name="issue" type="date" required value="${new Date().toISOString().slice(0,10)}"></label>
+      <label>Due Date<input name="due" type="date"></label>
+      <label class="full">Description<textarea name="description" placeholder="Design, revision, strategy, delivery…"></textarea></label>
+      <button class="submit" type="submit">Create Draft</button>
+    `;
+    form.onsubmit=(e)=>{
+      e.preventDefault();
+      const d=Object.fromEntries(new FormData(form).entries());
+      const amount=(Number(d.hours||0)*Number(d.rate||0));
+      queueAction('bill_it',{...d, amount});
+      currentModel.billQueue.unshift(`${d.client} — ${d.project} (${fmtMoney(amount)})`);
+      currentModel.revenue.ready=fmtMoney(money(currentModel.revenue.ready)+amount);
+      render(currentModel);
+      note.innerHTML=`Invoice draft queued (${fmtMoney(amount)}). Next: finalize in sheet/docs. <a href="${SHEET_URL}" target="_blank" rel="noopener">Open Sheet</a>`;
+    };
   };
 }
 
 (async function init(){
   const ds = document.getElementById('dataSource');
   try{
-    const [jobs,time,invoices] = await Promise.all([
-      fetchTab(GIDS.jobs),
-      fetchTab(GIDS.time),
-      fetchTab(GIDS.invoices)
-    ]);
-    render(fromSheet(jobs,time,invoices));
-    ds.textContent='Live data connected';
-    ds.style.color='#246b45';
+    const [jobs,time,invoices] = await Promise.all([fetchTab(GIDS.jobs), fetchTab(GIDS.time), fetchTab(GIDS.invoices)]);
+    currentModel = fromSheet(jobs,time,invoices);
+    render(currentModel);
+    ds.textContent='Live data connected'; ds.style.color='#246b45';
   }catch(e){
-    render(fallback);
-    ds.textContent='Using demo data (share sheet publicly to connect live)';
-    ds.style.color='#9a6a10';
+    currentModel = structuredClone(fallback);
+    render(currentModel);
+    ds.textContent='Using demo data (share sheet publicly to connect live)'; ds.style.color='#9a6a10';
   }
+  wireUI();
 })();
