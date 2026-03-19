@@ -1,6 +1,9 @@
 const SHEET_ID = '1Ym3DmIw7gwF0I6hMk9b1GRxRZzVNVVoHhQvQd4hMhkY';
 const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit`;
 const GIDS = { jobs: 423951101, time: 1419771717, invoices: 310085797, clients: 1839494336, dashboard: 1598520406 };
+// Set this after deploying Google Apps Script web app endpoint
+const DEFAULT_SYNC_ENDPOINT = '';
+
 
 const fallback = {
   alerts:[
@@ -194,7 +197,38 @@ function fromSheet(jobs, time, invoices, clients){
 }
 
 function getQueue(){ try{return JSON.parse(localStorage.getItem('gdpQueue')||'[]');}catch{return [];} }
-function setQueue(q){ localStorage.setItem('gdpQueue', JSON.stringify(q)); }
+function setQueue(q){ localStorage.setItem('gdpQueue', JSON.stringify(q)); updateQueueStatus(); }
+function getSyncEndpoint(){ return localStorage.getItem('gdpSyncEndpoint') || DEFAULT_SYNC_ENDPOINT; }
+function setSyncEndpoint(url){ localStorage.setItem('gdpSyncEndpoint', url || ''); }
+function updateQueueStatus(){
+  const el = document.getElementById('queueStatus');
+  if (!el) return;
+  const q = getQueue();
+  el.textContent = `Queue: ${q.length}`;
+}
+
+async function syncQueue(){
+  const endpoint = getSyncEndpoint();
+  if (!endpoint) {
+    const input = prompt('Paste Apps Script Web App endpoint URL to enable sync:');
+    if (!input) return;
+    setSyncEndpoint(input.trim());
+  }
+  const url = getSyncEndpoint();
+  const q = getQueue();
+  if (!q.length) { alert('Queue is empty.'); return; }
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sheetId: SHEET_ID, actions: q })
+  });
+  if (!res.ok) throw new Error(`Sync failed: HTTP ${res.status}`);
+  const json = await res.json();
+  if (!json.ok) throw new Error(json.error || 'Sync failed');
+  setQueue([]);
+  alert(`Synced ${json.applied || q.length} action(s) to sheet.`);
+}
 
 function queueAction(type,payload){
   const q=getQueue();
@@ -308,6 +342,11 @@ function wireUI(){
       note.innerHTML=`Client added locally (${d.status}). Sync to master sheet → <a href="${SHEET_URL}" target="_blank" rel="noopener">Open Sheet</a>`;
     };
   };
+
+  document.getElementById('btnSyncQueue').onclick=async ()=>{
+    try { await syncQueue(); }
+    catch (err) { alert(err.message || 'Sync failed.'); }
+  };
 }
 
 (async function init(){
@@ -332,4 +371,5 @@ function wireUI(){
     ds.textContent='Using demo data (share sheet publicly to connect live)'; ds.style.color='#9a6a10';
   }
   wireUI();
+  updateQueueStatus();
 })();
