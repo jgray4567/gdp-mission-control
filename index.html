@@ -21,15 +21,29 @@
       </div>
       <nav>
         <a class="active" href="#">Dashboard</a>
-        <a href="#">Live Jobs</a>
-        <a href="#">Timeline</a>
-        <a href="#">Clients</a>
-        <a href="#">Inquiries</a>
-        <a href="#">Billing</a>
-        <a href="#">Alerts</a>
-        <a href="#">Reports</a>
+        <a href="#liveJobsCard">Live Jobs</a>
+        <a href="#kpis">Timeline</a>
+        <a href="#clientsCard">Clients</a>
+        <a href="#alertsCard">Inquiries</a>
+        <a href="#billCard">Billing</a>
+        <a href="#alertsCard">Alerts</a>
+        <a href="#revenueCard">Reports</a>
         <a href="#">Settings</a>
       </nav>
+
+      <div class="mobile-nav-wrap">
+        <label for="mobileNavDropdown">Navigate</label>
+        <select id="mobileNavDropdown" onchange="if(this.value) location.hash=this.value;">
+          <option value="">Select view…</option>
+          <option value="#">Dashboard</option>
+          <option value="#liveJobsCard">Live Jobs</option>
+          <option value="#kpis">Timeline</option>
+          <option value="#clientsCard">Clients</option>
+          <option value="#alertsCard">Inquiries / Alerts</option>
+          <option value="#billCard">Billing</option>
+          <option value="#revenueCard">Reports</option>
+        </select>
+      </div>
     </aside>
 
     <main class="main">
@@ -50,17 +64,17 @@
       <section class="kpis" id="kpis"></section>
 
       <section class="grid">
-        <article class="card">
+        <article id="alertsCard" class="card">
           <div class="card-head"><h3>Urgent Alerts</h3><span>Needs attention</span></div>
           <ul class="list" id="alerts"></ul>
         </article>
 
-        <article class="card">
+        <article id="billCard" class="card">
           <div class="card-head"><h3>Ready to Bill</h3><span>Draft queue</span></div>
           <ul class="list" id="billQueue"></ul>
         </article>
 
-        <article class="card wide">
+        <article id="liveJobsCard" class="card wide">
           <div class="card-head"><h3>Live Jobs</h3><span>Jon + Joy</span></div>
           <table>
             <thead>
@@ -70,7 +84,7 @@
           </table>
         </article>
 
-        <article class="card">
+        <article id="revenueCard" class="card">
           <div class="card-head"><h3>Revenue</h3><span>MTD snapshot</span></div>
           <div class="metric-block">
             <div><label>Ready to bill</label><strong id="revReady"></strong></div>
@@ -88,7 +102,7 @@
           </div>
         </article>
 
-        <article class="card">
+        <article id="clientsCard" class="card">
           <div class="card-head"><h3>Client Master</h3><span>Active / Inactive</span></div>
           <ul class="list" id="clientsList"></ul>
         </article>
