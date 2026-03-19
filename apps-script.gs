@@ -5,11 +5,19 @@
  *  - Who has access: Anyone with the link
  */
 
+const SHARED_SYNC_TOKEN = 'CHANGE_ME_STRONG_TOKEN';
+
 function doPost(e) {
   try {
-    const body = JSON.parse(e.postData.contents || '{}');
+    const headers = e && e.parameter ? e.parameter : {};
+    const raw = (e && e.postData && e.postData.contents) ? e.postData.contents : '{}';
+    const body = JSON.parse(raw);
     const sheetId = body.sheetId;
     const actions = body.actions || [];
+    const incomingToken = body.token || body.syncToken || '';
+    if (!incomingToken || incomingToken !== SHARED_SYNC_TOKEN) {
+      throw new Error('Unauthorized: invalid sync token');
+    }
     if (!sheetId) throw new Error('Missing sheetId');
 
     const ss = SpreadsheetApp.openById(sheetId);

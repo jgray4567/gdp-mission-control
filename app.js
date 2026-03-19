@@ -3,6 +3,7 @@ const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit`;
 const GIDS = { jobs: 423951101, time: 1419771717, invoices: 310085797, clients: 1839494336, dashboard: 1598520406 };
 // Set this after deploying Google Apps Script web app endpoint
 const DEFAULT_SYNC_ENDPOINT = '';
+const DEFAULT_SYNC_TOKEN = '';
 
 
 const fallback = {
@@ -200,6 +201,8 @@ function getQueue(){ try{return JSON.parse(localStorage.getItem('gdpQueue')||'[]
 function setQueue(q){ localStorage.setItem('gdpQueue', JSON.stringify(q)); updateQueueStatus(); }
 function getSyncEndpoint(){ return localStorage.getItem('gdpSyncEndpoint') || DEFAULT_SYNC_ENDPOINT; }
 function setSyncEndpoint(url){ localStorage.setItem('gdpSyncEndpoint', url || ''); }
+function getSyncToken(){ return localStorage.getItem('gdpSyncToken') || DEFAULT_SYNC_TOKEN; }
+function setSyncToken(tok){ localStorage.setItem('gdpSyncToken', tok || ''); }
 function updateQueueStatus(){
   const el = document.getElementById('queueStatus');
   if (!el) return;
@@ -214,14 +217,23 @@ async function syncQueue(){
     if (!input) return;
     setSyncEndpoint(input.trim());
   }
+  if (!getSyncToken()) {
+    const tokenInput = prompt('Enter shared sync token:');
+    if (!tokenInput) return;
+    setSyncToken(tokenInput.trim());
+  }
+
   const url = getSyncEndpoint();
   const q = getQueue();
   if (!q.length) { alert('Queue is empty.'); return; }
 
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sheetId: SHEET_ID, actions: q })
+    headers: {
+      'Content-Type': 'application/json',
+      'X-GDP-SYNC-TOKEN': getSyncToken()
+    },
+    body: JSON.stringify({ sheetId: SHEET_ID, actions: q, syncToken: getSyncToken() })
   });
   if (!res.ok) throw new Error(`Sync failed: HTTP ${res.status}`);
   const json = await res.json();
