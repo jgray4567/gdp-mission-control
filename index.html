@@ -35,13 +35,14 @@
     <main class="main">
       <header class="topbar">
         <div>
-          <h2>Grayson Design Partners — Command Center</h2>
+          <h2>Grayson Design Partners — Command Center <span id="nextJobBadge" class="data-source">Next Job #7804</span></h2>
           <p>Track jobs, billing, and studio performance in one place. <span id="dataSource" class="data-source">Loading data…</span></p>
         </div>
         <div class="actions">
           <button id="btnNewJob">+ New Job</button>
           <button id="btnLogTime">+ Log Time</button>
           <button id="btnBillIt" class="primary">Bill It</button>
+          <button id="btnAddClient">+ Client</button>
         </div>
       </header>
 
@@ -84,6 +85,11 @@
             <div><label>Joy</label><strong id="capJoy"></strong></div>
             <div><label>Avg turnaround</label><strong id="turnaround"></strong></div>
           </div>
+        </article>
+
+        <article class="card">
+          <div class="card-head"><h3>Client Master</h3><span>Active / Inactive</span></div>
+          <ul class="list" id="clientsList"></ul>
         </article>
       </section>
     </main>

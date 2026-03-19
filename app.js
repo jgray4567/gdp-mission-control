@@ -1,6 +1,6 @@
 const SHEET_ID = '1Ym3DmIw7gwF0I6hMk9b1GRxRZzVNVVoHhQvQd4hMhkY';
 const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit`;
-const GIDS = { jobs: 423951101, time: 1419771717, invoices: 310085797 };
+const GIDS = { jobs: 423951101, time: 1419771717, invoices: 310085797, clients: 1839494336, dashboard: 1598520406 };
 
 const fallback = {
   alerts:[
@@ -29,6 +29,8 @@ const fallback = {
 };
 
 let currentModel = structuredClone(fallback);
+let clientMaster = [];
+let nextJobNumber = 7804;
 
 function parseCSV(text){
   const rows=[]; let row=[]; let cell=''; let inQ=false;
@@ -62,6 +64,26 @@ async function fetchTab(gid){
   return rowsToObjects(parseCSV(txt));
 }
 
+async function fetchMatrix(gid){
+  const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}`;
+  const res=await fetch(url,{cache:'no-store'});
+  if(!res.ok) throw new Error(`HTTP ${res.status}`);
+  const txt=await res.text();
+  if(/<!doctype html>|<html/i.test(txt)) throw new Error('Sheet not publicly readable yet');
+  return parseCSV(txt);
+}
+
+function getNextJobNumber(){
+  const local = Number(localStorage.getItem('gdpNextJobNumber') || nextJobNumber);
+  return Number.isFinite(local) && local > 0 ? local : 7804;
+}
+function setNextJobNumber(v){
+  nextJobNumber = Number(v) || nextJobNumber;
+  localStorage.setItem('gdpNextJobNumber', String(nextJobNumber));
+  const badge = document.getElementById('nextJobBadge');
+  if (badge) badge.textContent = `Next Job #${nextJobNumber}`;
+}
+
 function render(model){
   const kpis=document.getElementById('kpis'); kpis.innerHTML='';
   model.kpis.forEach(([label,val])=>{const d=document.createElement('div');d.className='kpi';d.innerHTML=`<label>${label}</label><strong>${val}</strong>`;kpis.appendChild(d);});
@@ -86,9 +108,37 @@ function render(model){
   document.getElementById('capJon').textContent=model.capacity.jon;
   document.getElementById('capJoy').textContent=model.capacity.joy;
   document.getElementById('turnaround').textContent=model.capacity.turnaround;
+  setNextJobNumber(getNextJobNumber());
+
+  const cl = document.getElementById('clientsList');
+  if (cl) {
+    cl.innerHTML = '';
+    clientMaster.slice(0,10).forEach((c, idx) => {
+      const li = document.createElement('li');
+      const status = (c.status || 'Active').toLowerCase() === 'inactive' ? 'Inactive' : 'Active';
+      li.innerHTML = `<div class="client-row"><span>${c.client || c.name || 'Client'} <span class="pill ${status==='Active'?'ok':'warn'}">${status}</span></span><button class="tiny-btn" data-idx="${idx}">${status==='Active'?'Set Inactive':'Set Active'}</button></div>`;
+      cl.appendChild(li);
+    });
+    cl.querySelectorAll('button[data-idx]').forEach(btn => {
+      btn.onclick = () => {
+        const i = Number(btn.dataset.idx);
+        if (!clientMaster[i]) return;
+        const next = (clientMaster[i].status || 'Active').toLowerCase() === 'inactive' ? 'Active' : 'Inactive';
+        clientMaster[i].status = next;
+        queueAction('set_client_status', { client: clientMaster[i].client || clientMaster[i].name, status: next });
+        render(currentModel);
+      };
+    });
+  }
 }
 
-function fromSheet(jobs, time, invoices){
+function fromSheet(jobs, time, invoices, clients){
+  clientMaster = (clients || []).map(c => ({
+    client: c['client'] || c['name'] || '',
+    status: c['status'] || 'Active',
+    email: c['email'] || '',
+    phone: c['phone'] || ''
+  }));
   const now = new Date();
   const thisMonth = now.getMonth(), thisYear = now.getFullYear();
   const activeStatuses = new Set(['active','in progress','production','review','client feedback','implementation']);
@@ -164,7 +214,9 @@ function wireUI(){
   document.getElementById('btnNewJob').onclick=()=>{
     modal.classList.remove('hidden');
     title.textContent='Create New Job';
+    const jobNo = getNextJobNumber();
     form.innerHTML=`
+      <label>Job #<input name="jobNumber" required readonly value="${jobNo}"></label>
       <label>Client<input name="client" required></label>
       <label>Project<input name="project" required></label>
       <label>Owner<select name="owner"><option>Jon</option><option>Joy</option></select></label>
@@ -176,10 +228,11 @@ function wireUI(){
       e.preventDefault();
       const d=Object.fromEntries(new FormData(form).entries());
       queueAction('new_job',d);
-      currentModel.jobs.unshift([d.project,d.client,d.owner,'Lead',d.due||'—','On Track','$—']);
+      currentModel.jobs.unshift([`${d.jobNumber} · ${d.project}`,d.client,d.owner,'Lead',d.due||'—','On Track','$—']);
       currentModel.kpis[0][1]=Number(currentModel.kpis[0][1]||0)+1;
+      setNextJobNumber(Number(d.jobNumber) + 1);
       render(currentModel);
-      note.innerHTML=`Saved to local queue. Next: sync to sheet → <a href="${SHEET_URL}" target="_blank" rel="noopener">Open Sheet</a>`;
+      note.innerHTML=`Saved Job #${d.jobNumber}. Next number is ${getNextJobNumber()}. Sync to sheet → <a href="${SHEET_URL}" target="_blank" rel="noopener">Open Sheet</a>`;
     };
   };
 
@@ -216,7 +269,7 @@ function wireUI(){
       <label>Client<input name="client" required></label>
       <label>Project<input name="project" required></label>
       <label>Hours<input name="hours" type="number" step="0.25" min="0" required></label>
-      <label>Rate<input name="rate" type="number" step="1" min="0" required></label>
+      <label>Rate<input name="rate" type="number" step="1" min="0" required value="100"></label>
       <label>Issue Date<input name="issue" type="date" required value="${new Date().toISOString().slice(0,10)}"></label>
       <label>Due Date<input name="due" type="date"></label>
       <label class="full">Description<textarea name="description" placeholder="Design, revision, strategy, delivery…"></textarea></label>
@@ -233,13 +286,44 @@ function wireUI(){
       note.innerHTML=`Invoice draft queued (${fmtMoney(amount)}). Next: finalize in sheet/docs. <a href="${SHEET_URL}" target="_blank" rel="noopener">Open Sheet</a>`;
     };
   };
+
+  document.getElementById('btnAddClient').onclick=()=>{
+    modal.classList.remove('hidden');
+    title.textContent='Add Client';
+    form.innerHTML=`
+      <label>Client Name<input name="client" required></label>
+      <label>Primary Contact<input name="contact"></label>
+      <label>Email<input name="email" type="email"></label>
+      <label>Phone<input name="phone"></label>
+      <label>Status<select name="status"><option>Active</option><option>Inactive</option></select></label>
+      <label>Default Rate<input name="rate" type="number" step="1" value="100"></label>
+      <button class="submit" type="submit">Add Client</button>
+    `;
+    form.onsubmit=(e)=>{
+      e.preventDefault();
+      const d=Object.fromEntries(new FormData(form).entries());
+      queueAction('add_client',d);
+      clientMaster.unshift({client:d.client,status:d.status,email:d.email,phone:d.phone});
+      render(currentModel);
+      note.innerHTML=`Client added locally (${d.status}). Sync to master sheet → <a href="${SHEET_URL}" target="_blank" rel="noopener">Open Sheet</a>`;
+    };
+  };
 }
 
 (async function init(){
   const ds = document.getElementById('dataSource');
   try{
-    const [jobs,time,invoices] = await Promise.all([fetchTab(GIDS.jobs), fetchTab(GIDS.time), fetchTab(GIDS.invoices)]);
-    currentModel = fromSheet(jobs,time,invoices);
+    const [jobs,time,invoices,clients,dashboardMatrix] = await Promise.all([
+      fetchTab(GIDS.jobs), fetchTab(GIDS.time), fetchTab(GIDS.invoices), fetchTab(GIDS.clients), fetchMatrix(GIDS.dashboard)
+    ]);
+    // Pull next open job number from Dashboard settings if present
+    for (const row of dashboardMatrix) {
+      if ((row[3] || '').toLowerCase().includes('next open job number')) {
+        const n = Number(row[4]);
+        if (Number.isFinite(n) && n > 0) setNextJobNumber(n);
+      }
+    }
+    currentModel = fromSheet(jobs,time,invoices,clients);
     render(currentModel);
     ds.textContent='Live data connected'; ds.style.color='#246b45';
   }catch(e){
