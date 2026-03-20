@@ -105,14 +105,17 @@
         <article id="clientsCard" class="card wide">
           <div class="card-head"><h3>Client Master</h3><span>Active / Inactive / Archive</span></div>
           <div class="clients-toolbar">
-            <input id="clientSearch" type="search" placeholder="Search client, contact, email…" />
+            <input id="clientSearch" type="search" placeholder="Search client, contact, email, tags…" />
             <select id="clientSort">
               <option value="client">Sort: Client Name</option>
               <option value="primary contact">Sort: Contact Person</option>
               <option value="email">Sort: Email</option>
+              <option value="outstanding">Sort: Outstanding</option>
+              <option value="last activity">Sort: Last Activity</option>
               <option value="status">Sort: Status</option>
             </select>
             <label class="check-inline"><input id="showInactive" type="checkbox" checked /> Show Inactive</label>
+            <label class="check-inline"><input id="showArchived" type="checkbox" /> Show Archived</label>
           </div>
           <div class="clients-table-wrap">
             <table id="clientsTable">
@@ -122,6 +125,9 @@
                   <th>Contact</th>
                   <th>Email</th>
                   <th>Phone</th>
+                  <th>Tags</th>
+                  <th>Last Activity</th>
+                  <th>Outstanding</th>
                   <th>Status</th>
                   <th>Actions</th>
                 </tr>

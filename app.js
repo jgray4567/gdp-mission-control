@@ -35,7 +35,7 @@ const fallback = {
 let currentModel = structuredClone(fallback);
 let clientMaster = [];
 let nextJobNumber = 7804;
-let clientsUI = { sortBy: 'client', search: '', showInactive: true };
+let clientsUI = { sortBy: 'client', search: '', showInactive: true, showArchived: false };
 
 function parseCSV(text){
   const rows=[]; let row=[]; let cell=''; let inQ=false;
@@ -95,17 +95,35 @@ function renderClientsTable(){
   body.innerHTML = '';
 
   const rows = clientMaster
-    .filter(c => clientsUI.showInactive ? true : String(c.status || 'Active').toLowerCase() !== 'inactive')
     .filter(c => {
-      const hay = `${c.client || ''} ${c['primary contact'] || ''} ${c.email || ''} ${c.phone || ''}`.toLowerCase();
+      const s = String(c.status || 'Active').toLowerCase();
+      if (!clientsUI.showInactive && s === 'inactive') return false;
+      if (!clientsUI.showArchived && s === 'archived') return false;
+      return true;
+    })
+    .filter(c => {
+      const hay = `${c.client || ''} ${c['primary contact'] || ''} ${c.email || ''} ${c.phone || ''} ${c.tags || ''}`.toLowerCase();
       return hay.includes((clientsUI.search || '').toLowerCase());
     })
     .sort((a,b) => {
-      // Active first always
-      const sa = String(a.status || 'Active').toLowerCase() === 'inactive' ? 1 : 0;
-      const sb = String(b.status || 'Active').toLowerCase() === 'inactive' ? 1 : 0;
+      // Active first, then Inactive, then Archived
+      const rank = s => {
+        const v = String(s || 'Active').toLowerCase();
+        if (v === 'active') return 0;
+        if (v === 'inactive') return 1;
+        if (v === 'archived') return 2;
+        return 3;
+      };
+      const sa = rank(a.status), sb = rank(b.status);
       if (sa !== sb) return sa - sb;
+
       const key = clientsUI.sortBy;
+      if (key === 'outstanding') return (Number(b.outstanding)||0) - (Number(a.outstanding)||0);
+      if (key === 'last activity') {
+        const ad = new Date(a['last activity'] || '1970-01-01').getTime();
+        const bd = new Date(b['last activity'] || '1970-01-01').getTime();
+        return bd - ad;
+      }
       const av = String(a[key] || a.client || '').toLowerCase();
       const bv = String(b[key] || b.client || '').toLowerCase();
       return av.localeCompare(bv);
@@ -113,16 +131,21 @@ function renderClientsTable(){
 
   rows.forEach((c, idx) => {
     const tr = document.createElement('tr');
-    const status = String(c.status || 'Active').toLowerCase() === 'inactive' ? 'Inactive' : 'Active';
+    const rawStatus = String(c.status || 'Active').toLowerCase();
+    const status = rawStatus === 'archived' ? 'Archived' : (rawStatus === 'inactive' ? 'Inactive' : 'Active');
+    const pillClass = status==='Active' ? 'ok' : (status==='Inactive' ? 'warn' : 'danger');
     tr.innerHTML = `
       <td>${c.client || '—'}</td>
       <td>${c['primary contact'] || '—'}</td>
       <td>${c.email || '—'}</td>
       <td>${c.phone || '—'}</td>
-      <td><span class="pill ${status==='Active'?'ok':'warn'}">${status}</span></td>
+      <td>${c.tags || '—'}</td>
+      <td>${c['last activity'] || '—'}</td>
+      <td>${fmtMoney(c.outstanding || 0)}</td>
+      <td><span class="pill ${pillClass}">${status}</span></td>
       <td>
         <button class="tiny-btn" data-action="toggle" data-client="${(c.client||'').replace(/"/g,'&quot;')}">${status==='Active'?'Set Inactive':'Set Active'}</button>
-        <button class="tiny-btn" data-action="delete" data-client="${(c.client||'').replace(/"/g,'&quot;')}">Delete</button>
+        <button class="tiny-btn" data-action="archive" data-client="${(c.client||'').replace(/"/g,'&quot;')}">${status==='Archived'?'Unarchive':'Archive'}</button>
       </td>`;
     body.appendChild(tr);
   });
@@ -134,31 +157,42 @@ function renderClientsTable(){
       if (!rec) return;
       const next = (String(rec.status||'Active').toLowerCase()==='inactive') ? 'Active' : 'Inactive';
       rec.status = next;
+      touchClientActivity(name);
       queueAction('set_client_status', { client: name, status: next });
       renderClientsTable();
     };
   });
 
-  body.querySelectorAll('button[data-action="delete"]').forEach(btn => {
+  body.querySelectorAll('button[data-action="archive"]').forEach(btn => {
     btn.onclick = () => {
       const name = btn.dataset.client;
-      if (!confirm(`Delete client \"${name}\" from list?`)) return;
-      clientMaster = clientMaster.filter(x => (x.client||'') !== name);
-      queueAction('delete_client', { client: name });
+      const rec = clientMaster.find(x => (x.client||'') === name);
+      if (!rec) return;
+      const next = (String(rec.status || 'Active').toLowerCase() === 'archived') ? 'Inactive' : 'Archived';
+      rec.status = next;
+      touchClientActivity(name);
+      queueAction('set_client_status', { client: name, status: next });
       renderClientsTable();
     };
   });
+}
+
+function touchClientActivity(clientName){
+  const rec = clientMaster.find(c => String(c.client||'').trim().toLowerCase() === String(clientName||'').trim().toLowerCase());
+  if (rec) rec['last activity'] = new Date().toISOString().slice(0,10);
 }
 
 function bindClientsControls(){
   const search = document.getElementById('clientSearch');
   const sort = document.getElementById('clientSort');
   const showInactive = document.getElementById('showInactive');
+  const showArchived = document.getElementById('showArchived');
   if (!search || search.dataset.bound) return;
   search.dataset.bound = '1';
   search.oninput = () => { clientsUI.search = search.value || ''; renderClientsTable(); };
   sort.onchange = () => { clientsUI.sortBy = sort.value; renderClientsTable(); };
   showInactive.onchange = () => { clientsUI.showInactive = !!showInactive.checked; renderClientsTable(); };
+  showArchived.onchange = () => { clientsUI.showArchived = !!showArchived.checked; renderClientsTable(); };
 }
 
 function render(model){
@@ -203,13 +237,44 @@ function render(model){
 }
 
 function fromSheet(jobs, time, invoices, clients){
-  clientMaster = (clients || []).map(c => ({
-    client: c['client'] || c['name'] || '',
-    'primary contact': c['primary contact'] || c['contact'] || '',
-    status: c['status'] || 'Active',
-    email: c['email'] || '',
-    phone: c['phone'] || ''
-  }));
+  // Build outstanding and activity maps from invoices/time logs
+  const outstandingByClient = {};
+  const lastActivityByClient = {};
+  (invoices || []).forEach(inv => {
+    const client = (inv['client'] || '').trim();
+    if (!client) return;
+    const st = (inv['status'] || '').toLowerCase();
+    const amt = money(inv['amount']);
+    if (st !== 'paid') outstandingByClient[client] = (outstandingByClient[client] || 0) + amt;
+    const dt = new Date(inv['paid date'] || inv['issue date']);
+    if (!Number.isNaN(dt.getTime())) {
+      const cur = lastActivityByClient[client] ? new Date(lastActivityByClient[client]) : null;
+      if (!cur || dt > cur) lastActivityByClient[client] = dt.toISOString().slice(0,10);
+    }
+  });
+  (time || []).forEach(t => {
+    const client = (t['client'] || '').trim();
+    if (!client) return;
+    const dt = new Date(t['date']);
+    if (!Number.isNaN(dt.getTime())) {
+      const cur = lastActivityByClient[client] ? new Date(lastActivityByClient[client]) : null;
+      if (!cur || dt > cur) lastActivityByClient[client] = dt.toISOString().slice(0,10);
+    }
+  });
+
+  clientMaster = (clients || []).map(c => {
+    const client = c['client'] || c['name'] || '';
+    return {
+      client,
+      'primary contact': c['primary contact'] || c['contact'] || '',
+      status: c['status'] || 'Active',
+      email: c['email'] || '',
+      phone: c['phone'] || '',
+      tags: c['tags'] || '',
+      'last activity': c['last activity'] || lastActivityByClient[client] || '—',
+      outstanding: Number(c['outstanding'] || outstandingByClient[client] || 0)
+    };
+  });
   const now = new Date();
   const thisMonth = now.getMonth(), thisYear = now.getFullYear();
   const activeStatuses = new Set(['active','in progress','production','review','client feedback','implementation']);
@@ -361,6 +426,7 @@ function openLogTimeForm(prefill = {}){
     e.preventDefault();
     const d=Object.fromEntries(new FormData(form).entries());
     queueAction('log_time',d);
+    touchClientActivity(d.client);
     const h=Number(d.hours||0);
     currentModel.kpis[2][1]=(Number(currentModel.kpis[2][1]||0)+h).toFixed(1);
     if(d.person==='Jon') currentModel.kpis[8][1]=(Number(currentModel.kpis[8][1]||0)+h).toFixed(1);
@@ -425,6 +491,9 @@ function wireUI(){
       const d=Object.fromEntries(new FormData(form).entries());
       const amount=(Number(d.hours||0)*Number(d.rate||0));
       queueAction('bill_it',{...d, amount});
+      touchClientActivity(d.client);
+      const rec = clientMaster.find(c => String(c.client||'').trim().toLowerCase() === String(d.client||'').trim().toLowerCase());
+      if (rec) rec.outstanding = Number(rec.outstanding || 0) + amount;
       currentModel.billQueue.unshift(`${d.client} — ${d.project} (${fmtMoney(amount)})`);
       currentModel.revenue.ready=fmtMoney(money(currentModel.revenue.ready)+amount);
       render(currentModel);
@@ -440,6 +509,7 @@ function wireUI(){
       <label>Primary Contact<input name="contact"></label>
       <label>Email<input name="email" type="email"></label>
       <label>Phone<input name="phone"></label>
+      <label>Tags (industry/type)<input name="tags" placeholder="Restaurant, Healthcare, Real Estate"></label>
       <label>Status<select name="status"><option>Active</option><option>Inactive</option></select></label>
       <label>Default Rate<input name="rate" type="number" step="1" value="100"></label>
       <button class="submit" type="submit">Save Client</button>
@@ -447,13 +517,27 @@ function wireUI(){
     form.onsubmit=(e)=>{
       e.preventDefault();
       const d=Object.fromEntries(new FormData(form).entries());
+      const nameNorm = (d.client || '').trim().toLowerCase();
+      const emailNorm = (d.email || '').trim().toLowerCase();
+      const dup = clientMaster.find(c =>
+        ((c.client || '').trim().toLowerCase() === nameNorm) ||
+        (emailNorm && (c.email || '').trim().toLowerCase() === emailNorm)
+      );
+      if (dup) {
+        note.innerHTML = `Possible duplicate detected: <strong>${dup.client}</strong>. Please confirm before adding.`;
+        return;
+      }
+
       queueAction('add_client',d);
       clientMaster.unshift({
         client:d.client,
         'primary contact': d.contact || '',
         status:d.status,
         email:d.email || '',
-        phone:d.phone || ''
+        phone:d.phone || '',
+        tags: d.tags || '',
+        'last activity': new Date().toISOString().slice(0,10),
+        outstanding: 0
       });
       renderClientsTable();
       note.innerHTML=`Client \"${d.client}\" saved to list (${d.status}). Sync pending → <a href="${SHEET_URL}" target="_blank" rel="noopener">Open Sheet</a>`;
