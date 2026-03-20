@@ -76,6 +76,26 @@
 
         <article id="liveJobsCard" class="card wide">
           <div class="card-head"><h3>Live Jobs</h3><span>Jon + Joy</span></div>
+          <div class="jobs-toolbar">
+            <select id="jobOwnerFilter">
+              <option value="all">Owner: All</option>
+              <option value="Jon">Owner: Jon</option>
+              <option value="Joy">Owner: Joy</option>
+            </select>
+            <select id="jobStatusFilter">
+              <option value="all">Status: All</option>
+              <option value="On Track">On Track</option>
+              <option value="At Risk">At Risk</option>
+              <option value="Ready to Bill">Ready to Bill</option>
+              <option value="Waiting">Waiting</option>
+            </select>
+            <select id="jobDueFilter">
+              <option value="all">Due: All</option>
+              <option value="week">Due This Week</option>
+              <option value="overdue">Overdue Only</option>
+            </select>
+            <label class="check-inline"><input id="jobActiveOnly" type="checkbox" checked /> Active only</label>
+          </div>
           <table>
             <thead>
               <tr><th>Job #</th><th>Project</th><th>Client</th><th>Owner</th><th>Stage</th><th>Started</th><th>Due</th><th>Timeline</th><th>Status</th><th>Billable</th><th>Action</th></tr>

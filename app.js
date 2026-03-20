@@ -36,6 +36,7 @@ let currentModel = structuredClone(fallback);
 let clientMaster = [];
 let nextJobNumber = 7804;
 let clientsUI = { sortBy: 'client', search: '', showInactive: true, showArchived: false };
+let jobsUI = { owner: 'all', status: 'all', due: 'all', activeOnly: true };
 
 function parseCSV(text){
   const rows=[]; let row=[]; let cell=''; let inQ=false;
@@ -195,6 +196,19 @@ function bindClientsControls(){
   showArchived.onchange = () => { clientsUI.showArchived = !!showArchived.checked; renderClientsTable(); };
 }
 
+function bindJobsControls(){
+  const owner = document.getElementById('jobOwnerFilter');
+  const status = document.getElementById('jobStatusFilter');
+  const due = document.getElementById('jobDueFilter');
+  const activeOnly = document.getElementById('jobActiveOnly');
+  if (!owner || owner.dataset.bound) return;
+  owner.dataset.bound = '1';
+  owner.onchange = () => { jobsUI.owner = owner.value; render(currentModel); };
+  status.onchange = () => { jobsUI.status = status.value; render(currentModel); };
+  due.onchange = () => { jobsUI.due = due.value; render(currentModel); };
+  activeOnly.onchange = () => { jobsUI.activeOnly = !!activeOnly.checked; render(currentModel); };
+}
+
 function render(model){
   const kpis=document.getElementById('kpis'); kpis.innerHTML='';
   model.kpis.forEach(([label,val])=>{const d=document.createElement('div');d.className='kpi';d.innerHTML=`<label>${label}</label><strong>${val}</strong>`;kpis.appendChild(d);});
@@ -206,10 +220,34 @@ function render(model){
   model.billQueue.forEach(x=>{const li=document.createElement('li');li.innerHTML=`${x} <span class="pill ok">Bill It</span>`;bq.appendChild(li);});
 
   const tb=document.getElementById('jobs'); tb.innerHTML='';
-  model.jobs.forEach(r=>{
+  const now = Date.now();
+  const in7 = now + (7 * 24 * 60 * 60 * 1000);
+  const activeStages = ['lead','active','in progress','production','review','client feedback','implementation'];
+
+  const filteredJobs = model.jobs.filter(r => {
+    const owner = r[3] || '';
+    const status = r[8] || '';
+    const stage = String(r[4] || '').toLowerCase();
+    const due = new Date(r[6]);
+
+    if (jobsUI.owner !== 'all' && owner !== jobsUI.owner) return false;
+    if (jobsUI.status !== 'all' && status !== jobsUI.status) return false;
+
+    if (jobsUI.activeOnly && !activeStages.some(s => stage.includes(s))) return false;
+
+    if (jobsUI.due === 'week') {
+      if (Number.isNaN(due.getTime()) || due.getTime() < now || due.getTime() > in7) return false;
+    }
+    if (jobsUI.due === 'overdue') {
+      if (Number.isNaN(due.getTime()) || due.getTime() >= now) return false;
+    }
+    return true;
+  });
+
+  filteredJobs.forEach(r=>{
     const tr=document.createElement('tr');
-    const status = r[8]==='At Risk'?'danger':(r[8]==='Ready to Bill'?'ok':'warn');
-    tr.innerHTML=`<td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td><td>${r[5]}</td><td>${r[6]}</td><td>${r[7]}</td><td><span class="pill ${status}">${r[8]}</span></td><td>${r[9]}</td><td><button class="tiny-btn log-time-inline" data-job="${String(r[0]).replace(/"/g,'&quot;')}" data-project="${String(r[1]).replace(/"/g,'&quot;')}" data-client="${String(r[2]).replace(/"/g,'&quot;')}" data-person="${String(r[3]).replace(/"/g,'&quot;')}">Log Time</button></td>`;
+    const statusClass = r[8]==='At Risk'?'danger':(r[8]==='Ready to Bill'?'ok':'warn');
+    tr.innerHTML=`<td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td><td>${r[5]}</td><td>${r[6]}</td><td>${r[7]}</td><td><span class="pill ${statusClass}">${r[8]}</span></td><td>${r[9]}</td><td><button class="tiny-btn log-time-inline" data-job="${String(r[0]).replace(/"/g,'&quot;')}" data-project="${String(r[1]).replace(/"/g,'&quot;')}" data-client="${String(r[2]).replace(/"/g,'&quot;')}" data-person="${String(r[3]).replace(/"/g,'&quot;')}">Log Time</button></td>`;
     tb.appendChild(tr);
   });
 
@@ -232,6 +270,7 @@ function render(model){
   document.getElementById('turnaround').textContent=model.capacity.turnaround;
   setNextJobNumber(getNextJobNumber());
 
+  bindJobsControls();
   bindClientsControls();
   renderClientsTable();
 }
