@@ -102,9 +102,33 @@
           </div>
         </article>
 
-        <article id="clientsCard" class="card">
-          <div class="card-head"><h3>Client Master</h3><span>Active / Inactive</span></div>
-          <ul class="list" id="clientsList"></ul>
+        <article id="clientsCard" class="card wide">
+          <div class="card-head"><h3>Client Master</h3><span>Active / Inactive / Archive</span></div>
+          <div class="clients-toolbar">
+            <input id="clientSearch" type="search" placeholder="Search client, contact, email…" />
+            <select id="clientSort">
+              <option value="client">Sort: Client Name</option>
+              <option value="primary contact">Sort: Contact Person</option>
+              <option value="email">Sort: Email</option>
+              <option value="status">Sort: Status</option>
+            </select>
+            <label class="check-inline"><input id="showInactive" type="checkbox" checked /> Show Inactive</label>
+          </div>
+          <div class="clients-table-wrap">
+            <table id="clientsTable">
+              <thead>
+                <tr>
+                  <th>Client</th>
+                  <th>Contact</th>
+                  <th>Email</th>
+                  <th>Phone</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="clientsBody"></tbody>
+            </table>
+          </div>
         </article>
       </section>
     </main>

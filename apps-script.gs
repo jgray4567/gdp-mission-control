@@ -103,6 +103,18 @@ function doPost(e) {
             }
           }
           break;
+
+        case 'delete_client':
+          // Remove entire row for matching client in column A
+          const rows = shClients.getRange(2,1, Math.max(0, shClients.getLastRow()-1), 1).getValues();
+          for (let i = rows.length - 1; i >= 0; i--) {
+            if (String(rows[i][0]).trim().toLowerCase() === String(p.client || '').trim().toLowerCase()) {
+              shClients.deleteRow(i + 2);
+              applied++;
+              break;
+            }
+          }
+          break;
       }
     });
 

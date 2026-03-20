@@ -35,6 +35,7 @@ const fallback = {
 let currentModel = structuredClone(fallback);
 let clientMaster = [];
 let nextJobNumber = 7804;
+let clientsUI = { sortBy: 'client', search: '', showInactive: true };
 
 function parseCSV(text){
   const rows=[]; let row=[]; let cell=''; let inQ=false;
@@ -88,6 +89,78 @@ function setNextJobNumber(v){
   if (badge) badge.textContent = `Next Job #${nextJobNumber}`;
 }
 
+function renderClientsTable(){
+  const body = document.getElementById('clientsBody');
+  if (!body) return;
+  body.innerHTML = '';
+
+  const rows = clientMaster
+    .filter(c => clientsUI.showInactive ? true : String(c.status || 'Active').toLowerCase() !== 'inactive')
+    .filter(c => {
+      const hay = `${c.client || ''} ${c['primary contact'] || ''} ${c.email || ''} ${c.phone || ''}`.toLowerCase();
+      return hay.includes((clientsUI.search || '').toLowerCase());
+    })
+    .sort((a,b) => {
+      // Active first always
+      const sa = String(a.status || 'Active').toLowerCase() === 'inactive' ? 1 : 0;
+      const sb = String(b.status || 'Active').toLowerCase() === 'inactive' ? 1 : 0;
+      if (sa !== sb) return sa - sb;
+      const key = clientsUI.sortBy;
+      const av = String(a[key] || a.client || '').toLowerCase();
+      const bv = String(b[key] || b.client || '').toLowerCase();
+      return av.localeCompare(bv);
+    });
+
+  rows.forEach((c, idx) => {
+    const tr = document.createElement('tr');
+    const status = String(c.status || 'Active').toLowerCase() === 'inactive' ? 'Inactive' : 'Active';
+    tr.innerHTML = `
+      <td>${c.client || '—'}</td>
+      <td>${c['primary contact'] || '—'}</td>
+      <td>${c.email || '—'}</td>
+      <td>${c.phone || '—'}</td>
+      <td><span class="pill ${status==='Active'?'ok':'warn'}">${status}</span></td>
+      <td>
+        <button class="tiny-btn" data-action="toggle" data-client="${(c.client||'').replace(/"/g,'&quot;')}">${status==='Active'?'Set Inactive':'Set Active'}</button>
+        <button class="tiny-btn" data-action="delete" data-client="${(c.client||'').replace(/"/g,'&quot;')}">Delete</button>
+      </td>`;
+    body.appendChild(tr);
+  });
+
+  body.querySelectorAll('button[data-action="toggle"]').forEach(btn => {
+    btn.onclick = () => {
+      const name = btn.dataset.client;
+      const rec = clientMaster.find(x => (x.client||'') === name);
+      if (!rec) return;
+      const next = (String(rec.status||'Active').toLowerCase()==='inactive') ? 'Active' : 'Inactive';
+      rec.status = next;
+      queueAction('set_client_status', { client: name, status: next });
+      renderClientsTable();
+    };
+  });
+
+  body.querySelectorAll('button[data-action="delete"]').forEach(btn => {
+    btn.onclick = () => {
+      const name = btn.dataset.client;
+      if (!confirm(`Delete client \"${name}\" from list?`)) return;
+      clientMaster = clientMaster.filter(x => (x.client||'') !== name);
+      queueAction('delete_client', { client: name });
+      renderClientsTable();
+    };
+  });
+}
+
+function bindClientsControls(){
+  const search = document.getElementById('clientSearch');
+  const sort = document.getElementById('clientSort');
+  const showInactive = document.getElementById('showInactive');
+  if (!search || search.dataset.bound) return;
+  search.dataset.bound = '1';
+  search.oninput = () => { clientsUI.search = search.value || ''; renderClientsTable(); };
+  sort.onchange = () => { clientsUI.sortBy = sort.value; renderClientsTable(); };
+  showInactive.onchange = () => { clientsUI.showInactive = !!showInactive.checked; renderClientsTable(); };
+}
+
 function render(model){
   const kpis=document.getElementById('kpis'); kpis.innerHTML='';
   model.kpis.forEach(([label,val])=>{const d=document.createElement('div');d.className='kpi';d.innerHTML=`<label>${label}</label><strong>${val}</strong>`;kpis.appendChild(d);});
@@ -114,31 +187,14 @@ function render(model){
   document.getElementById('turnaround').textContent=model.capacity.turnaround;
   setNextJobNumber(getNextJobNumber());
 
-  const cl = document.getElementById('clientsList');
-  if (cl) {
-    cl.innerHTML = '';
-    clientMaster.slice(0,10).forEach((c, idx) => {
-      const li = document.createElement('li');
-      const status = (c.status || 'Active').toLowerCase() === 'inactive' ? 'Inactive' : 'Active';
-      li.innerHTML = `<div class="client-row"><span>${c.client || c.name || 'Client'} <span class="pill ${status==='Active'?'ok':'warn'}">${status}</span></span><button class="tiny-btn" data-idx="${idx}">${status==='Active'?'Set Inactive':'Set Active'}</button></div>`;
-      cl.appendChild(li);
-    });
-    cl.querySelectorAll('button[data-idx]').forEach(btn => {
-      btn.onclick = () => {
-        const i = Number(btn.dataset.idx);
-        if (!clientMaster[i]) return;
-        const next = (clientMaster[i].status || 'Active').toLowerCase() === 'inactive' ? 'Active' : 'Inactive';
-        clientMaster[i].status = next;
-        queueAction('set_client_status', { client: clientMaster[i].client || clientMaster[i].name, status: next });
-        render(currentModel);
-      };
-    });
-  }
+  bindClientsControls();
+  renderClientsTable();
 }
 
 function fromSheet(jobs, time, invoices, clients){
   clientMaster = (clients || []).map(c => ({
     client: c['client'] || c['name'] || '',
+    'primary contact': c['primary contact'] || c['contact'] || '',
     status: c['status'] || 'Active',
     email: c['email'] || '',
     phone: c['phone'] || ''
