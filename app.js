@@ -145,10 +145,20 @@ function renderClientsTable(){
       <td>${fmtMoney(c.outstanding || 0)}</td>
       <td><span class="pill ${pillClass}">${status}</span></td>
       <td>
+        <button class="tiny-btn" data-action="details" data-client="${(c.client||'').replace(/"/g,'&quot;')}">Details</button>
+        <button class="tiny-btn" data-action="newjob" data-client="${(c.client||'').replace(/"/g,'&quot;')}">+ Job</button>
         <button class="tiny-btn" data-action="toggle" data-client="${(c.client||'').replace(/"/g,'&quot;')}">${status==='Active'?'Set Inactive':'Set Active'}</button>
         <button class="tiny-btn" data-action="archive" data-client="${(c.client||'').replace(/"/g,'&quot;')}">${status==='Archived'?'Unarchive':'Archive'}</button>
       </td>`;
     body.appendChild(tr);
+  });
+
+  body.querySelectorAll('button[data-action="details"]').forEach(btn => {
+    btn.onclick = () => openClientDrawer(btn.dataset.client);
+  });
+
+  body.querySelectorAll('button[data-action="newjob"]').forEach(btn => {
+    btn.onclick = () => openNewJobForm({ client: btn.dataset.client });
   });
 
   body.querySelectorAll('button[data-action="toggle"]').forEach(btn => {
@@ -475,6 +485,75 @@ function openLogTimeForm(prefill = {}){
   };
 }
 
+function openNewJobForm(prefill = {}){
+  const modal=document.getElementById('modal');
+  const form=document.getElementById('modalForm');
+  const title=document.getElementById('modalTitle');
+  const note=document.getElementById('modalNote');
+  modal.classList.remove('hidden');
+  title.textContent='Create New Job';
+  const jobNo = getNextJobNumber();
+  form.innerHTML=`
+    <label>Job #<input name="jobNumber" required readonly value="${jobNo}"></label>
+    <label>Client<input name="client" required value="${prefill.client || ''}"></label>
+    <label>Project<input name="project" required></label>
+    <label>Owner<select name="owner"><option ${prefill.owner==='Jon'?'selected':''}>Jon</option><option ${prefill.owner==='Joy'?'selected':''}>Joy</option></select></label>
+    <label>Due Date<input name="due" type="date"></label>
+    <label class="full">Notes<textarea name="notes"></textarea></label>
+    <button class="submit" type="submit">Save Job</button>
+  `;
+  form.onsubmit=(e)=>{
+    e.preventDefault();
+    const d=Object.fromEntries(new FormData(form).entries());
+    queueAction('new_job',d);
+    const started = new Date().toISOString().slice(0,10);
+    currentModel.jobs.unshift([String(d.jobNumber),d.project,d.client,d.owner,'Lead',started,d.due||'—','new','On Track','$—']);
+    currentModel.kpis[0][1]=Number(currentModel.kpis[0][1]||0)+1;
+    setNextJobNumber(Number(d.jobNumber) + 1);
+    touchClientActivity(d.client);
+    render(currentModel);
+    note.innerHTML=`Saved Job #${d.jobNumber}. Next number is ${getNextJobNumber()}. Sync to sheet → <a href="${SHEET_URL}" target="_blank" rel="noopener">Open Sheet</a>`;
+  };
+}
+
+function openClientDrawer(clientName){
+  const drawer = document.getElementById('clientDrawer');
+  const title = document.getElementById('drawerTitle');
+  const body = document.getElementById('drawerBody');
+  const rec = clientMaster.find(c => String(c.client||'').trim().toLowerCase() === String(clientName||'').trim().toLowerCase());
+  if (!rec || !drawer || !title || !body) return;
+  title.textContent = rec.client || 'Client Details';
+
+  const jobCount = currentModel.jobs.filter(j => String(j[2]||'').trim().toLowerCase() === String(rec.client||'').trim().toLowerCase()).length;
+  const invoiceCount = currentModel.billQueue.filter(x => String(x).toLowerCase().includes(String(rec.client||'').toLowerCase())).length;
+
+  body.innerHTML = `
+    <div class="kv"><div class="label">Contact</div><div>${rec['primary contact'] || '—'}</div></div>
+    <div class="kv"><div class="label">Email</div><div>${rec.email || '—'}</div></div>
+    <div class="kv"><div class="label">Phone</div><div>${rec.phone || '—'}</div></div>
+    <div class="kv"><div class="label">Tags</div><div>${rec.tags || '—'}</div></div>
+    <div class="kv"><div class="label">Status</div><div>${rec.status || 'Active'}</div></div>
+    <div class="kv"><div class="label">Last Activity</div><div>${rec['last activity'] || '—'}</div></div>
+    <div class="kv"><div class="label">Outstanding</div><div>${fmtMoney(rec.outstanding || 0)}</div></div>
+    <div class="kv"><div class="label">Jobs (loaded)</div><div>${jobCount}</div></div>
+    <div class="kv"><div class="label">Billing Queue</div><div>${invoiceCount}</div></div>
+    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="tiny-btn" id="drawerNewJob">+ New Job for Client</button>
+      <button class="tiny-btn" id="drawerLogTime">Log Time for Client</button>
+    </div>
+  `;
+  drawer.classList.remove('hidden');
+
+  const closeBtn = document.getElementById('drawerClose');
+  if (closeBtn) closeBtn.onclick = () => drawer.classList.add('hidden');
+  drawer.onclick = (e)=>{ if(e.target===drawer) drawer.classList.add('hidden'); };
+
+  const jBtn = document.getElementById('drawerNewJob');
+  if (jBtn) jBtn.onclick = ()=>{ drawer.classList.add('hidden'); openNewJobForm({client:rec.client}); };
+  const tBtn = document.getElementById('drawerLogTime');
+  if (tBtn) tBtn.onclick = ()=>{ drawer.classList.add('hidden'); openLogTimeForm({client:rec.client, person:'Jon'}); };
+}
+
 function wireUI(){
   const modal=document.getElementById('modal');
   const form=document.getElementById('modalForm');
@@ -484,31 +563,7 @@ function wireUI(){
   document.getElementById('modalClose').onclick=close;
   modal.addEventListener('click',e=>{ if(e.target===modal) close(); });
 
-  document.getElementById('btnNewJob').onclick=()=>{
-    modal.classList.remove('hidden');
-    title.textContent='Create New Job';
-    const jobNo = getNextJobNumber();
-    form.innerHTML=`
-      <label>Job #<input name="jobNumber" required readonly value="${jobNo}"></label>
-      <label>Client<input name="client" required></label>
-      <label>Project<input name="project" required></label>
-      <label>Owner<select name="owner"><option>Jon</option><option>Joy</option></select></label>
-      <label>Due Date<input name="due" type="date"></label>
-      <label class="full">Notes<textarea name="notes"></textarea></label>
-      <button class="submit" type="submit">Save Job</button>
-    `;
-    form.onsubmit=(e)=>{
-      e.preventDefault();
-      const d=Object.fromEntries(new FormData(form).entries());
-      queueAction('new_job',d);
-      const started = new Date().toISOString().slice(0,10);
-      currentModel.jobs.unshift([String(d.jobNumber),d.project,d.client,d.owner,'Lead',started,d.due||'—','new','On Track','$—']);
-      currentModel.kpis[0][1]=Number(currentModel.kpis[0][1]||0)+1;
-      setNextJobNumber(Number(d.jobNumber) + 1);
-      render(currentModel);
-      note.innerHTML=`Saved Job #${d.jobNumber}. Next number is ${getNextJobNumber()}. Sync to sheet → <a href="${SHEET_URL}" target="_blank" rel="noopener">Open Sheet</a>`;
-    };
-  };
+  document.getElementById('btnNewJob').onclick=()=> openNewJobForm();
 
   document.getElementById('btnLogTime').onclick=()=> openLogTimeForm();
 
