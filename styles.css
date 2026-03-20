@@ -24,6 +24,7 @@ table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:8px 6px;
   .app{grid-template-columns:1fr}
   .main{padding:14px 12px}
   .sidebar{height:auto;position:static;padding:12px 12px 8px}
+  .brand img{width:min(146px,46vw);max-width:none}
   .sidebar > nav,
   .sidebar nav{display:none !important}
   .mobile-nav-wrap{display:block;margin-top:6px;position:sticky;top:8px;z-index:15;background:#fbfcfd;padding:6px;border:1px solid var(--line);border-radius:10px}
