@@ -18,11 +18,11 @@ const fallback = {
     'A1A Consulting — Proposal prep + revisions (6.5h)'
   ],
   jobs:[
-    ['Website Refresh','Summit Homes','Jon','Production','Mar 22','At Risk','$3,125'],
-    ['Brand Kit Update','Riverstone Dental','Joy','Review','Mar 21','On Track','$2,240'],
-    ['Speakeasy Promo Assets','Giuseppe\'s','Jon','Delivered','Mar 19','Ready to Bill','$1,860'],
-    ['Investor Deck Revisions','PickleOps','Joy','Client Feedback','Mar 25','Waiting','$1,350'],
-    ['Automation Setup','DE Project','Jon','Implementation','Mar 27','On Track','$875']
+    ['7808','Website Refresh','Summit Homes','Jon','Production','Mar 12','Mar 22','10d','At Risk','$3,125'],
+    ['7807','Brand Kit Update','Riverstone Dental','Joy','Review','Mar 10','Mar 21','11d','On Track','$2,240'],
+    ['7806','Speakeasy Promo Assets','Giuseppe\'s','Jon','Delivered','Mar 8','Mar 19','11d','Ready to Bill','$1,860'],
+    ['7805','Investor Deck Revisions','PickleOps','Joy','Client Feedback','Mar 15','Mar 25','10d','Waiting','$1,350'],
+    ['7804','Automation Setup','DE Project','Jon','Implementation','Mar 16','Mar 27','11d','On Track','$875']
   ],
   kpis:[
     ['Active Jobs',12],['Due This Week',5],['Overdue',2],['New Inquiries',4],['Unread Alerts',3],
@@ -174,8 +174,8 @@ function render(model){
   const tb=document.getElementById('jobs'); tb.innerHTML='';
   model.jobs.forEach(r=>{
     const tr=document.createElement('tr');
-    const status = r[5]==='At Risk'?'danger':(r[5]==='Ready to Bill'?'ok':'warn');
-    tr.innerHTML=`<td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td><td><span class="pill ${status}">${r[5]}</span></td><td>${r[6]}</td>`;
+    const status = r[8]==='At Risk'?'danger':(r[8]==='Ready to Bill'?'ok':'warn');
+    tr.innerHTML=`<td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td><td>${r[5]}</td><td>${r[6]}</td><td>${r[7]}</td><td><span class="pill ${status}">${r[8]}</span></td><td>${r[9]}</td>`;
     tb.appendChild(tr);
   });
 
@@ -230,11 +230,36 @@ function fromSheet(jobs, time, invoices, clients){
     if(st==='paid' && !Number.isNaN(pd.getTime()) && pd.getMonth()===thisMonth && pd.getFullYear()===thisYear) billedMTD+=amt;
   });
 
-  const jobsRows = jobs.slice(0,8).map(j=>[
-    j['project']||j['job']||'—', j['client']||'—', j['owner']||'—', j['status']||'—', j['due date']||'—',
-    (j['status']||'').toLowerCase().includes('risk') ? 'At Risk' : ((j['status']||'').toLowerCase().includes('bill') ? 'Ready to Bill' : 'On Track'),
-    j['billable amount'] || '$—'
-  ]);
+  const sortedJobs = [...jobs].sort((a,b)=>{
+    const ja = Number(String(a['job id']||a['job #']||'').replace(/[^\d]/g,'')) || 0;
+    const jb = Number(String(b['job id']||b['job #']||'').replace(/[^\d]/g,'')) || 0;
+    return jb - ja; // highest/latest job number first
+  });
+
+  const jobsRows = sortedJobs.slice(0,12).map(j=>{
+    const started = j['start date'] || '—';
+    const due = j['due date'] || '—';
+    let timeline = '—';
+    const d = new Date(due);
+    if (!Number.isNaN(d.getTime())) {
+      const days = Math.ceil((d.getTime() - Date.now())/(1000*60*60*24));
+      timeline = days < 0 ? `${Math.abs(days)}d late` : `${days}d left`;
+    }
+    const state = (j['status']||'').toLowerCase();
+    const uiStatus = state.includes('risk') ? 'At Risk' : (state.includes('bill') ? 'Ready to Bill' : (state.includes('waiting') ? 'Waiting' : 'On Track'));
+    return [
+      j['job id'] || j['job #'] || '—',
+      j['project'] || j['job'] || '—',
+      j['client'] || '—',
+      j['owner'] || '—',
+      j['status'] || '—',
+      started,
+      due,
+      timeline,
+      uiStatus,
+      j['billable amount'] || '$—'
+    ];
+  });
 
   return {
     alerts:[
@@ -330,7 +355,8 @@ function wireUI(){
       e.preventDefault();
       const d=Object.fromEntries(new FormData(form).entries());
       queueAction('new_job',d);
-      currentModel.jobs.unshift([`${d.jobNumber} · ${d.project}`,d.client,d.owner,'Lead',d.due||'—','On Track','$—']);
+      const started = new Date().toISOString().slice(0,10);
+      currentModel.jobs.unshift([String(d.jobNumber),d.project,d.client,d.owner,'Lead',started,d.due||'—','new','On Track','$—']);
       currentModel.kpis[0][1]=Number(currentModel.kpis[0][1]||0)+1;
       setNextJobNumber(Number(d.jobNumber) + 1);
       render(currentModel);
