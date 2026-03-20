@@ -425,15 +425,22 @@ function wireUI(){
       <label>Phone<input name="phone"></label>
       <label>Status<select name="status"><option>Active</option><option>Inactive</option></select></label>
       <label>Default Rate<input name="rate" type="number" step="1" value="100"></label>
-      <button class="submit" type="submit">Add Client</button>
+      <button class="submit" type="submit">Save Client</button>
     `;
     form.onsubmit=(e)=>{
       e.preventDefault();
       const d=Object.fromEntries(new FormData(form).entries());
       queueAction('add_client',d);
-      clientMaster.unshift({client:d.client,status:d.status,email:d.email,phone:d.phone});
-      render(currentModel);
-      note.innerHTML=`Client added locally (${d.status}). Sync to master sheet → <a href="${SHEET_URL}" target="_blank" rel="noopener">Open Sheet</a>`;
+      clientMaster.unshift({
+        client:d.client,
+        'primary contact': d.contact || '',
+        status:d.status,
+        email:d.email || '',
+        phone:d.phone || ''
+      });
+      renderClientsTable();
+      note.innerHTML=`Client \"${d.client}\" saved to list (${d.status}). Sync pending → <a href="${SHEET_URL}" target="_blank" rel="noopener">Open Sheet</a>`;
+      setTimeout(()=>{ close(); }, 650);
     };
   };
 
