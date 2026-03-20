@@ -175,8 +175,19 @@ function render(model){
   model.jobs.forEach(r=>{
     const tr=document.createElement('tr');
     const status = r[8]==='At Risk'?'danger':(r[8]==='Ready to Bill'?'ok':'warn');
-    tr.innerHTML=`<td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td><td>${r[5]}</td><td>${r[6]}</td><td>${r[7]}</td><td><span class="pill ${status}">${r[8]}</span></td><td>${r[9]}</td>`;
+    tr.innerHTML=`<td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td><td>${r[5]}</td><td>${r[6]}</td><td>${r[7]}</td><td><span class="pill ${status}">${r[8]}</span></td><td>${r[9]}</td><td><button class="tiny-btn log-time-inline" data-job="${String(r[0]).replace(/"/g,'&quot;')}" data-project="${String(r[1]).replace(/"/g,'&quot;')}" data-client="${String(r[2]).replace(/"/g,'&quot;')}" data-person="${String(r[3]).replace(/"/g,'&quot;')}">Log Time</button></td>`;
     tb.appendChild(tr);
+  });
+
+  tb.querySelectorAll('.log-time-inline').forEach(btn => {
+    btn.onclick = () => {
+      openLogTimeForm({
+        jobNumber: btn.dataset.job,
+        project: btn.dataset.project,
+        client: btn.dataset.client,
+        person: btn.dataset.person
+      });
+    };
   });
 
   document.getElementById('revReady').textContent=model.revenue.ready;
@@ -329,6 +340,36 @@ function queueAction(type,payload){
   setQueue(q);
 }
 
+function openLogTimeForm(prefill = {}){
+  const modal=document.getElementById('modal');
+  const form=document.getElementById('modalForm');
+  const title=document.getElementById('modalTitle');
+  const note=document.getElementById('modalNote');
+  modal.classList.remove('hidden');
+  title.textContent='Log Time';
+  form.innerHTML=`
+    <label>Date<input name="date" type="date" required value="${new Date().toISOString().slice(0,10)}"></label>
+    <label>Client<input name="client" required value="${prefill.client || ''}"></label>
+    <label>Project<input name="project" required value="${prefill.project || ''}"></label>
+    <label>Person<select name="person"><option ${prefill.person==='Jon'?'selected':''}>Jon</option><option ${prefill.person==='Joy'?'selected':''}>Joy</option></select></label>
+    <label>Hours<input name="hours" type="number" step="0.25" min="0" required></label>
+    <label>Billable<select name="billable"><option>Yes</option><option>No</option></select></label>
+    <label class="full">Description<textarea name="description">${prefill.jobNumber ? `Job #${prefill.jobNumber} — ` : ''}${prefill.project || ''}</textarea></label>
+    <button class="submit" type="submit">Log Time</button>
+  `;
+  form.onsubmit=(e)=>{
+    e.preventDefault();
+    const d=Object.fromEntries(new FormData(form).entries());
+    queueAction('log_time',d);
+    const h=Number(d.hours||0);
+    currentModel.kpis[2][1]=(Number(currentModel.kpis[2][1]||0)+h).toFixed(1);
+    if(d.person==='Jon') currentModel.kpis[8][1]=(Number(currentModel.kpis[8][1]||0)+h).toFixed(1);
+    if(d.person==='Joy') currentModel.kpis[9][1]=(Number(currentModel.kpis[9][1]||0)+h).toFixed(1);
+    render(currentModel);
+    note.innerHTML=`Logged locally. Next: sync to sheet → <a href="${SHEET_URL}" target="_blank" rel="noopener">Open Sheet</a>`;
+  };
+}
+
 function wireUI(){
   const modal=document.getElementById('modal');
   const form=document.getElementById('modalForm');
@@ -364,31 +405,7 @@ function wireUI(){
     };
   };
 
-  document.getElementById('btnLogTime').onclick=()=>{
-    modal.classList.remove('hidden');
-    title.textContent='Log Time';
-    form.innerHTML=`
-      <label>Date<input name="date" type="date" required value="${new Date().toISOString().slice(0,10)}"></label>
-      <label>Client<input name="client" required></label>
-      <label>Project<input name="project" required></label>
-      <label>Person<select name="person"><option>Jon</option><option>Joy</option></select></label>
-      <label>Hours<input name="hours" type="number" step="0.25" min="0" required></label>
-      <label>Billable<select name="billable"><option>Yes</option><option>No</option></select></label>
-      <label class="full">Description<textarea name="description"></textarea></label>
-      <button class="submit" type="submit">Log Time</button>
-    `;
-    form.onsubmit=(e)=>{
-      e.preventDefault();
-      const d=Object.fromEntries(new FormData(form).entries());
-      queueAction('log_time',d);
-      const h=Number(d.hours||0);
-      currentModel.kpis[2][1]=(Number(currentModel.kpis[2][1]||0)+h).toFixed(1);
-      if(d.person==='Jon') currentModel.kpis[8][1]=(Number(currentModel.kpis[8][1]||0)+h).toFixed(1);
-      if(d.person==='Joy') currentModel.kpis[9][1]=(Number(currentModel.kpis[9][1]||0)+h).toFixed(1);
-      render(currentModel);
-      note.innerHTML=`Logged locally. Next: sync to sheet → <a href="${SHEET_URL}" target="_blank" rel="noopener">Open Sheet</a>`;
-    };
-  };
+  document.getElementById('btnLogTime').onclick=()=> openLogTimeForm();
 
   document.getElementById('btnBillIt').onclick=()=>{
     modal.classList.remove('hidden');
