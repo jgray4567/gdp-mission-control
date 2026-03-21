@@ -433,19 +433,31 @@ async function syncQueue(){
   const q = getQueue();
   if (!q.length) { alert('Queue is empty.'); return; }
 
-  const res = await fetch(url, {
-    method: 'POST',
-    mode: 'cors',
-    headers: {
-      'Content-Type': 'text/plain;charset=utf-8'
-    },
-    body: JSON.stringify({ sheetId: SHEET_ID, actions: q, syncToken: getSyncToken() })
-  });
-  if (!res.ok) throw new Error(`Sync failed: HTTP ${res.status}`);
-  const json = await res.json();
-  if (!json.ok) throw new Error(json.error || 'Sync failed');
-  setQueue([]);
-  alert(`Synced ${json.applied || q.length} action(s) to sheet.`);
+  const payload = JSON.stringify({ sheetId: SHEET_ID, actions: q, syncToken: getSyncToken() });
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      mode: 'cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: payload
+    });
+    if (!res.ok) throw new Error(`Sync failed: HTTP ${res.status}`);
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || 'Sync failed');
+    setQueue([]);
+    alert(`Synced ${json.applied || q.length} action(s) to sheet.`);
+    return;
+  } catch (err) {
+    // CORS fallback for Apps Script web apps: fire-and-forget and ask user to verify
+    await fetch(url, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: payload
+    });
+    alert('Sync request sent (CORS fallback). Please verify rows in the sheet; then clear queue if rows are present.');
+  }
 }
 
 function queueAction(type,payload){
