@@ -435,9 +435,9 @@ async function syncQueue(){
 
   const res = await fetch(url, {
     method: 'POST',
+    mode: 'cors',
     headers: {
-      'Content-Type': 'application/json',
-      'X-GDP-SYNC-TOKEN': getSyncToken()
+      'Content-Type': 'text/plain;charset=utf-8'
     },
     body: JSON.stringify({ sheetId: SHEET_ID, actions: q, syncToken: getSyncToken() })
   });
